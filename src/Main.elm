@@ -3,64 +3,68 @@ module Main exposing (..)
 import Browser
 import Http
 import Html exposing (..)
+import Html.Attributes exposing (..)
+import Html.Events exposing (..)
 
 
+--- MAIN
 
--- MAIN
-
-
-main =
-  Browser.element
-    { init = init
-    , update = update
-    , subscriptions = subscriptions
-    , view = view
-    }
+main = Browser.element { init = init 
+                       , update = update 
+                       , view = view 
+                       , subscriptions = subscriptions }
 
 
 
 -- MODEL
 
-
-type Model
-  = Failure
-  | Loading
-  | Success String
-
-
-init : () -> (Model, Cmd Msg)
-init _ =
-  ( Loading
-  , Http.get
-      { url = "../static/thousand_words_things_explainer.txt"
-      , expect = Http.expectString GotText
-      }
-  )
+type Model = Failure
+           | Loading 
+           | Success String
+  
+init : () -> ( Model, Cmd Msg )
+init _ = (Loading, getWords)
 
 
 
 -- UPDATE
 
+type Msg = GotText (Result Http.Error String)
 
-type Msg
-  = GotText (Result Http.Error String)
+update : Msg -> Model -> ( Model, Cmd msg )
+update msg model = case msg of
+  GotText result -> case result of 
+               Ok allWords -> (Success allWords, Cmd.none)
+               Err _ -> (Failure, Cmd.none)
+-- VIEW
+
+view : Model -> Html msg
+view model = 
+  div []
+    [ h1 [] [ text "Guess it" ] 
+    , viewWord model]
+  
+  
+viewWord model = 
+  case model of
+    Failure -> viewFailure
+    Loading -> viewLoading
+    Success allWords -> viewSuccess allWords
 
 
-update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
-  case msg of
-    GotText result ->
-      case result of
-        Ok fullText ->
-          (Success fullText, Cmd.none)
+viewFailure : Html msg
+viewFailure = text "Word not found"
 
-        Err _ ->
-          (Failure, Cmd.none)
+viewLoading : Html msg
+viewLoading = text "...Waiting..."
+
+viewSuccess : String -> Html msg
+viewSuccess allWords = text allWords
+
 
 
 
 -- SUBSCRIPTIONS
-
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
@@ -68,17 +72,10 @@ subscriptions model =
 
 
 
--- VIEW
 
+-- HTTP
 
-view : Model -> Html Msg
-view model =
-  case model of
-    Failure ->
-      text "I was unable to load your book."
-
-    Loading ->
-      text "Loading..."
-
-    Success fullText ->
-      pre [] [ text fullText ]
+getWords =
+  Http.get { url = "../static/thousand_words_things_explainer.txt" 
+           , expect = Http.expectString GotText }
+  
