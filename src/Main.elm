@@ -4,11 +4,15 @@ import Browser
 import Http
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.Events exposing (..)
+import Html.Events exposing (onClick, onInput)
 import String exposing (..)
 import Random
 import Random.List exposing (..)
-import List.Extra exposing (..)
+import Json.Decode exposing (..)
+import Bootstrap.Form.Checkbox as Checkbox
+
+
+
 
 
 --- MAIN
@@ -20,14 +24,32 @@ main = Browser.element { init = init
 
 
 
+
+
 -- MODEL
 
 type Model = Failure
            | Loading 
-           | Success String
+           | Success (List Intro)
+
+
+type alias Intro =
+    { word : String
+    , meanings : List Meaning 
+    }
+
+type alias Meaning =
+    { partOfSpeech : String
+    , definitions : List Definition
+    }
+
+type alias Definition =
+    { definition : String }
+
   
 init : () -> ( Model, Cmd Msg )
 init _ = (Loading, getWordsFromFile)
+
 
 
 
@@ -36,8 +58,7 @@ init _ = (Loading, getWordsFromFile)
 
 type Msg = GotText ( Result Http.Error String )       -- Si Result vaut Ok alors String sinon Http.Error
          | Word ( Maybe String , List String )        -- Maybe a = Just a | Nothing
-         | GotDef( Result Http.Error String ) 
-         
+         | GotDef ( Result Http.Error (List Intro) ) 
 
 
 update : Msg -> Model -> ( Model , Cmd Msg )
@@ -55,37 +76,58 @@ update msg model = case msg of
                                     , Cmd.none )
   
   GotDef result -> case result of 
-                      Ok defWord -> ( Success defWord
+                      Ok listIntro -> ( Success listIntro
                                      , Cmd.none )
                       Err _ -> ( Failure 
                                , Cmd.none )
            
 
 
+
+
 -- VIEW
 
-view : Model -> Html msg
+
+view : Model -> Html Msg
 view model = 
-  div []
-    [ h1 [] [ text "Guess it" ] 
-    , viewWord model]
-  
-  
-viewWord model = 
   case model of
-    Failure -> viewFailure
-    Loading -> viewLoading
-    Success a -> viewSuccess a
+    Failure -> div[] [ h1[] [ text "Error" ] ]
+    Loading -> div[] [ text "...Loading..." ]
+    Success listIntro -> viewSuccess listIntro
 
 
-viewFailure : Html msg
-viewFailure = text "Word not found"
+viewSuccess : List Intro -> Html Msg
+viewSuccess listIntro = 
+  div[]
+    [ h1[] [ text "Guess it !" ]
+    , ul[] (List.map viewIntro listIntro)
+    , div[] [ input [] [] ] 
+    , div[] [ Checkbox.checkbox [ Checkbox.id "myChk"
+                                 , Checkbox.checked False
+                                 {-- , Checkbox.onCheck MyCheckMsg -}   -- Si checked alors on applique la fonction MyCheckMsg 
+                                 ]
+                                 " show it " ] 
+    ]
+  
+--viewIntro : Meaning -> Html msg
+viewIntro listIntro =
+  div[] 
+    [ 
+     ul[] (List.map viewMeaning listIntro.meanings)
+    ]
 
-viewLoading : Html msg
-viewLoading = text "...Waiting..."
+--viewMeaning : Meaning -> Html msg
+viewMeaning mean =
+  li[] 
+    [ text mean.partOfSpeech
+    , ol[] (List.map viewDefinition mean.definitions)
+    ]
 
-viewSuccess : String -> Html msg
-viewSuccess a = text a
+--viewDefinition : Definition -> Html msg
+viewDefinition def =
+  li[] [ text def.definition ]
+
+
 
 
 
@@ -99,15 +141,36 @@ subscriptions model =
 
 
 
+
 -- HTTP
+
+
 getWordsFromFile : Cmd Msg
 getWordsFromFile =
   Http.get { url = "../static/thousand_words_things_explainer.txt" 
            , expect = Http.expectString GotText }
 
 getDefFromWord : String -> Cmd Msg
-getDefFromWord a =
-  Http.get { url = "https://api.dictionaryapi.dev/api/v2/entries/en/" ++ a
-           , expect = Http.expectString GotDef }
+getDefFromWord mot =
+  Http.get { url = "https://api.dictionaryapi.dev/api/v2/entries/en/" ++ mot
+           , expect = Http.expectJson GotDef defDecoder }
 
+defDecoder : Decoder (List Intro)
+defDecoder = Json.Decode.list introDecoder
 
+introDecoder : Decoder Intro
+introDecoder =
+    map2 Intro
+        (field "word" string)
+        (field "meanings" (Json.Decode.list meaningDecoder))
+        
+meaningDecoder : Decoder Meaning
+meaningDecoder =
+    map2 Meaning
+        (field "partOfSpeech" string)
+        (field "definitions" (Json.Decode.list definitionDecoder))
+
+definitionDecoder : Decoder Definition
+definitionDecoder =
+    Json.Decode.map Definition
+        (field "definition" string)
