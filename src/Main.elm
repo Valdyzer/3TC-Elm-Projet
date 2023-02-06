@@ -9,8 +9,6 @@ import String exposing (..)
 import Random
 import Random.List exposing (..)
 import Json.Decode exposing (..)
-import Bootstrap.Form.Checkbox as Checkbox
-
 
 
 
@@ -28,10 +26,19 @@ main = Browser.element { init = init
 
 -- MODEL
 
-type Model = Failure
+type State = Failure
            | Loading 
-           | Success (List Intro)
+           | Success 
 
+type alias Model =
+  { http : State
+  , jSon : State
+  , listWord : String
+  , word : String
+  , listIntro : List Intro
+  , inputContent : String
+  , title : String
+  }
 
 type alias Intro =
     { word : String
@@ -48,7 +55,7 @@ type alias Definition =
 
   
 init : () -> ( Model, Cmd Msg )
-init _ = (Loading, getWordsFromFile)
+init _ = ( Model Loading Loading "" "" [] "" "" , getWordsFromFile)
 
 
 
@@ -56,33 +63,33 @@ init _ = (Loading, getWordsFromFile)
 
 -- UPDATE
 
-type Msg = GotText ( Result Http.Error String )       -- Si Result vaut Ok alors String sinon Http.Error
-         | Word ( Maybe String , List String )        -- Maybe a = Just a | Nothing
-         | GotDef ( Result Http.Error (List Intro) ) 
+type Msg = GotText ( Result Http.Error String )
+         | Word ( Maybe String , List String )
+         | GotDef ( Result Http.Error (List Intro) )
+         | Fill String
+         | Click String
 
 
 update : Msg -> Model -> ( Model , Cmd Msg )
 update msg model = case msg of
   GotText result -> case result of 
-                      Ok allWords -> ( Loading
-                                     , Random.generate Word (Random.List.choose (split " " allWords)) )
-                      Err _ -> ( Failure 
-                               , Cmd.none )
+                      Ok allWords -> ( {model | http = Success , listWord = allWords} , Random.generate Word (Random.List.choose (split " " allWords)) )
+                      Err _ -> ( {model | http = Failure} , Cmd.none )
   
   Word maybe -> case maybe of
-                  ( Maybe.Just randomWord , _) -> ( Loading
-                                                  , getDefFromWord randomWord )
-                  ( Nothing, _ ) -> ( Failure 
-                                    , Cmd.none )
+                  ( Maybe.Just randomWord , _) -> ( {model | word = randomWord} , getDefFromWord randomWord )
+                  ( Nothing, _ ) -> ( {model | http = Failure} , Cmd.none )
   
   GotDef result -> case result of 
-                      Ok listIntro -> ( Success listIntro
-                                     , Cmd.none )
-                      Err _ -> ( Failure 
-                               , Cmd.none )
-           
+                      Ok data -> ( { model | jSon = Success , listIntro = data } , Cmd.none )
+                      Err _ -> ( {model | jSon = Failure} , Cmd.none )
 
+  Fill newContent -> ( {model | inputContent = newContent} , Cmd.none )        
 
+  Click reponse -> if model.title == reponse then
+                     ( {model | title = "Guess It !"} , Cmd.none )
+                   else
+                     ( {model | title = reponse} , Cmd.none )
 
 
 -- VIEW
@@ -90,43 +97,48 @@ update msg model = case msg of
 
 view : Model -> Html Msg
 view model = 
-  case model of
-    Failure -> div[] [ h1[] [ text "Error" ] ]
-    Loading -> div[] [ text "...Loading..." ]
-    Success listIntro -> viewSuccess listIntro
+  case model.http of
+    Failure -> div [] [ text "ERROR" ]
+    Loading -> div [] [ text "...Loading..." ]
+    Success -> form model ( case model.jSon of
+                                     Failure -> div[] [ text "ERROR" ]
+                                     Loading -> div[] [ text "...Loading..." ]
+                                     Success -> ( div [style "padding-left" "300px" , style "padding-right" "300px" , style "padding-bottom" "30px" , style "text-align" "center" ,style "font-family" "avenir"] 
+                                                 [ h1[] [ text (if String.toLower model.inputContent == String.toLower model.word then model.word else "Guess it !") ]
+                                                 , (ul [style "text-align" "left" , style "font-size" "15px"] (viewIntro model.listIntro)) ]) )
 
+form : Model -> Html Msg -> Html Msg
+form model stateText = 
+  div [ style "text-align" "center" , style "padding-bottom" "100px" , style "font-family" "avenir" ] 
+  [ stateText
+  , input [style "text-align" "center" , style "margin-bottom" "10px" , style "font-size" "13px" , placeholder "Try to find me", Html.Attributes.value model.inputContent , onInput Fill] []
 
-viewSuccess : List Intro -> Html Msg
-viewSuccess listIntro = 
-  div[]
-    [ h1[] [ text "Guess it !" ]
-    , ul[] (List.map viewIntro listIntro)
-    , div[] [ input [] [] ] 
-    , div[] [ Checkbox.checkbox [ Checkbox.id "myChk"
-                                 , Checkbox.checked False
-                                 {-- , Checkbox.onCheck MyCheckMsg -}   -- Si checked alors on applique la fonction MyCheckMsg 
-                                 ]
-                                 " show it " ] 
-    ]
+  , if String.toLower model.inputContent == String.toLower model.word then
+        div[][ div [style "padding-top" "10px" , style "font-weight" "bold" , style "color" "green"] [text "You guessed it !"] , img [ src "http://localhost:8000/static/derek-aaron-ruell-napoleon-dynamite.gif"] [] ]
+    else 
+        div [] [text "" ]
+  , button [ onClick (Click model.word) ] [ text "SHOW" ]
+  ]
+
   
---viewIntro : Meaning -> Html msg
+viewIntro : List Intro -> List (Html Msg)
 viewIntro listIntro =
-  div[] 
-    [ 
-     ul[] (List.map viewMeaning listIntro.meanings)
-    ]
+  case listIntro of
+    [] -> []
+    x :: xs -> (viewMeaning x.meanings) ++ (viewIntro xs)
+     
 
---viewMeaning : Meaning -> Html msg
+viewMeaning : List Meaning -> List (Html Msg)
 viewMeaning mean =
-  li[] 
-    [ text mean.partOfSpeech
-    , ol[] (List.map viewDefinition mean.definitions)
-    ]
+  case mean of
+    [] -> []
+    x :: xs -> [ li[] [(text x.partOfSpeech)] ] ++ [ ol[] (viewDefinition x.definitions) ] ++ (viewMeaning xs)
 
---viewDefinition : Definition -> Html msg
+viewDefinition : List Definition -> List (Html Msg)
 viewDefinition def =
-  li[] [ text def.definition ]
-
+  case def of
+    [] -> []
+    x :: xs -> [ li[] [(text x.definition)] ] ++ (viewDefinition xs)
 
 
 
@@ -147,13 +159,20 @@ subscriptions model =
 
 getWordsFromFile : Cmd Msg
 getWordsFromFile =
-  Http.get { url = "../static/thousand_words_things_explainer.txt" 
+  Http.get { url = "http://localhost:8000/static/thousand_words_things_explainer.txt" 
            , expect = Http.expectString GotText }
 
 getDefFromWord : String -> Cmd Msg
 getDefFromWord mot =
   Http.get { url = "https://api.dictionaryapi.dev/api/v2/entries/en/" ++ mot
            , expect = Http.expectJson GotDef defDecoder }
+
+
+
+
+
+-- JSON
+
 
 defDecoder : Decoder (List Intro)
 defDecoder = Json.Decode.list introDecoder
@@ -174,3 +193,4 @@ definitionDecoder : Decoder Definition
 definitionDecoder =
     Json.Decode.map Definition
         (field "definition" string)
+
