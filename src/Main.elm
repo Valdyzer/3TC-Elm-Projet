@@ -55,8 +55,8 @@ type alias Definition =
 
   
 init : () -> ( Model, Cmd Msg )
-init _ = ( Model Loading Loading "" "" [] "" "" , getWordsFromFile)
-
+init _ = ( Model Loading Loading "" "" [] "" "Guess it !" , getWordsFromFile)
+-- http = Loading , jSon = Loading , listWord = "" , word = "" , listIntro = [] , inputContent = "" , title = "Guess it"
 
 
 
@@ -86,10 +86,10 @@ update msg model = case msg of
 
   Fill newContent -> ( {model | inputContent = newContent} , Cmd.none )        
 
-  Click reponse -> if model.title == reponse then
-                     ( {model | title = "Guess It !"} , Cmd.none )
-                   else
-                     ( {model | title = reponse} , Cmd.none )
+  Click word -> if model.title == model.word then
+                       ({model | title = "Guess It !"}, Cmd.none)
+                     else
+                       ({model | title = word}, Cmd.none)
 
 
 -- VIEW
@@ -104,7 +104,7 @@ view model =
                                      Failure -> div[] [ text "ERROR" ]
                                      Loading -> div[] [ text "...Loading..." ]
                                      Success -> ( div [style "padding-left" "300px" , style "padding-right" "300px" , style "padding-bottom" "30px" , style "text-align" "center" ,style "font-family" "avenir"] 
-                                                 [ h1[] [ text (if String.toLower model.inputContent == String.toLower model.word then model.word else "Guess it !") ]
+                                                 [ h1[] [ text (if String.toLower model.inputContent == String.toLower model.word then model.word else model.title) ]
                                                  , (ul [style "text-align" "left" , style "font-size" "15px"] (viewIntro model.listIntro)) ]) )
 
 form : Model -> Html Msg -> Html Msg
