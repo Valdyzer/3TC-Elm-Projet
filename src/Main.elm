@@ -17,7 +17,7 @@ import Json.Decode exposing (..)
 
 main = Browser.element { init = init 
                        , update = update 
-                       , view = view 
+                       , view = view
                        , subscriptions = subscriptions }
 
 
